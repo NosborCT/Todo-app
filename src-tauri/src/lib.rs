@@ -1,11 +1,45 @@
 mod database;
+mod model;
 
-use tauri::Manager;
+use model::CreateTaskInput;
+use rusqlite::{Connection, params};
+use tauri::{Manager, State};
 
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+struct AppState {
+    db_path: String,
+}
+
 #[tauri::command]
 fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
+}
+
+
+#[tauri::command]
+fn create_task(
+    input: CreateTaskInput,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let connection = Connection::open(&state.db_path)
+        .map_err(|error| error.to_string())?;
+
+    connection
+        .execute(
+            "
+            INSERT INTO tasks (
+                title,
+                description
+            )
+            VALUES (?1, ?2)
+            ",
+            params![
+                input.title,
+                input.description
+            ],
+        )
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -25,14 +59,19 @@ pub fn run() {
 
             let db_path_str = db_path
                 .to_str()
-                .expect("O caminho do banco de dados não é válido");
+                .expect("O caminho do banco de dados não é válido")
+                .to_string();
 
-            database::init_database(db_path_str)
+            database::init_database(&db_path_str)
                 .expect("Não foi possível inicializar o banco de dados");
+
+            app.manage(AppState {
+                db_path: db_path_str,
+            });
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet])
+        .invoke_handler(tauri::generate_handler![greet, create_task])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

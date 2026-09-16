@@ -1,4 +1,4 @@
-CREATE TABLE tasks (
+CREATE TABLE IF NOT EXISTS tasks (
     task_id INTEGER PRIMARY KEY ,
     title TEXT NOT NULL,
     description TEXT,
