@@ -1,8 +1,8 @@
 mod database;
 mod model;
+use model::{CreateTaskInput, Task, UpdateTaskInput};
 
-use model::CreateTaskInput;
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use tauri::{Manager, State};
 
 struct AppState {
@@ -14,14 +14,75 @@ fn greet(name: &str) -> String {
     format!("Hello, {}! You've been greeted from Rust!", name)
 }
 
-
 #[tauri::command]
-fn create_task(
-    input: CreateTaskInput,
-    state: State<AppState>,
-) -> Result<(), String> {
+
+fn update_task(input: UpdateTaskInput, state: State<AppState>) -> Result<(), String> {
+    let connection = Connection::open(&state.db_path).map_err(|error| error.to_string())?;
+
+    connection
+        .execute(
+            "
+            UPDATE tasks
+            SET title = ?1,
+                description = ?2,
+                completed = ?3,
+                updated_at = CURRENT_TIMESTAMP,
+                completed_at = CASE WHEN ?3 THEN CURRENT_TIMESTAMP ELSE NULL END
+            WHERE task_id = ?4
+            ",
+            params![input.title, input.description, input.completed, input.task_id],
+        )
+        .map_err(|error| error.to_string())?;
+
+    Ok(())
+}
+#[tauri::command]
+fn list_tasks(state: State<AppState>) -> Result<Vec<Task>, String> {
     let connection = Connection::open(&state.db_path)
         .map_err(|error| error.to_string())?;
+
+    let mut statement = connection
+        .prepare(
+            "
+            SELECT
+                task_id,
+                title,
+                description,
+                completed,
+                created_at,
+                updated_at,
+                completed_at
+            FROM tasks
+            ORDER BY task_id DESC
+            ",
+        )
+        .map_err(|error| error.to_string())?;
+
+    let task_rows = statement
+        .query_map([], |row| {
+            Ok(Task {
+                task_id: row.get(0)?,
+                title: row.get(1)?,
+                description: row.get(2)?,
+                completed: row.get(3)?,
+                created_at: row.get(4)?,
+                updated_at: row.get(5)?,
+                completed_at: row.get(6)?,
+            })
+        })
+        .map_err(|error| error.to_string())?;
+
+    let mut tasks = Vec::new();
+
+    for task in task_rows {
+        tasks.push(task.map_err(|error| error.to_string())?);
+    }
+
+    Ok(tasks)
+} 
+#[tauri::command]
+fn create_task(input: CreateTaskInput, state: State<AppState>) -> Result<(), String> {
+    let connection = Connection::open(&state.db_path).map_err(|error| error.to_string())?;
 
     connection
         .execute(
@@ -32,10 +93,7 @@ fn create_task(
             )
             VALUES (?1, ?2)
             ",
-            params![
-                input.title,
-                input.description
-            ],
+            params![input.title, input.description],
         )
         .map_err(|error| error.to_string())?;
 
@@ -71,7 +129,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, create_task])
+        .invoke_handler(tauri::generate_handler![greet, create_task, list_tasks, update_task])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

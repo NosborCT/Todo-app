@@ -16,3 +16,12 @@ pub struct CreateTaskInput {
     pub title: String,
     pub description: Option<String>,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateTaskInput {
+    pub task_id: i64,
+    pub title: String,
+    pub description: Option<String>,
+    pub completed: bool,
+}
+
