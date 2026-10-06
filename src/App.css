@@ -1968,3 +1968,44 @@ kbd {
   height: 14px;
   border-radius: 4px;
 }
+.voice-capture {
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.voice-capture p {
+  margin: 0;
+}
+.voice-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.voice-status:empty {
+  display: none;
+}
+.voice-status.is-recording {
+  color: #dc2626;
+  font-weight: 600;
+}
+.voice-status progress {
+  width: 100%;
+  accent-color: #7c3aed;
+}
+.voice-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.voice-capture textarea {
+  width: 100%;
+  margin: 10px 0;
+}
+.voice-capture form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}

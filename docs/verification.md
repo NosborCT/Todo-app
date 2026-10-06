@@ -23,7 +23,27 @@ Limites de verificação: E2E de UI usa o adaptador de navegador; SQLite é veri
 
 Também foi executado `$env:TZ = "America/New_York"; npm test` no PowerShell: os mesmos 19 testes passaram em um fuso com transição de horário de verão.
 
-
 Correção adicional solicitada durante a implementação: o contexto do projeto selecionado agora é aplicado ao criar tarefas pelo modal (incluindo atalhos), pela captura rápida e por uma coluna Kanban. O teste verifica os três caminhos, persistência após recarregar e ausência de vínculo indevido ao sair do projeto.
 
 Build final após a correção do projeto: `npm run tauri build -- --no-bundle` concluído com sucesso. Executável de produção: `src-tauri/target/release/todo-app.exe`. Foram aprovados 27 testes distintos (19 domínio + 4 Rust + 4 E2E). O build também executou novamente a checagem TypeScript e o Vite. Há avisos não bloqueantes do toolchain sobre `STATIC_VCRUNTIME` e mensagens informativas do linker; não houve erro de compilação.
+
+## Captura por voz — 06/10/2026
+
+Primeira etapa implementada: instalar modelo, gravar/parar/cancelar, transcrever localmente, revisar e confirmar a criação na Inbox com o projeto de origem. A tela de revisão foi inspecionada em `docs/screenshots/voz.png`.
+
+Comandos de validação executados na raiz `Todo-app`:
+
+```powershell
+npm run build
+npm test
+npm run test:rust -- --offline
+npm run test:e2e
+$env:CHRONO_VOICE_FIXTURE_DIR = 'D:\code\ticktick\Todo-app\test-results\voice-native'
+node scripts/native.mjs cargo test --offline offline_whisper_fixture -- --ignored
+node --check scripts/native.mjs
+git diff --check
+```
+
+Resultado: 33 testes distintos aprovados (19 domínio, 6 Rust, 7 E2E e 1 integração real com Whisper). O teste de integração é ignorado na execução comum para evitar download de 142 MiB. Foi executado separadamente, primeiro com download e verificação SHA-256, depois com o mesmo modelo sem rede. A fixture WAV mono/16 kHz/16 bits foi gerada por System.Speech com voz sintética em inglês; o teste reconheceu a palavra esperada. O arquivo fica na pasta isolada de testes e não contém gravação do usuário.
+
+Os E2E de voz simulam somente a fronteira IPC nativa e verificam instalação, revisão, confirmação, projeto, recuperação de falha ao salvar, cancelamento e indisponibilidade no navegador. Rust testa silêncio, gravação curta e reamostragem. A inferência real é verificada separadamente. Não foi acionado o microfone físico, nem validada a qualidade do reconhecimento de português com a voz do usuário. Os dados existentes não foram alterados.

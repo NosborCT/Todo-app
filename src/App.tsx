@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Clock3,
+  Mic,
   Plus,
   Search,
   LayoutGrid,
@@ -60,6 +61,7 @@ import {
   type Loaded,
 } from './lib/storage';
 import { TaskEditor } from './TaskEditor';
+import { VoiceCapture } from './VoiceCapture';
 import { CalendarView, HabitsView, FocusView, SettingsView, type Mutate } from './Views';
 import { Dialog, Empty } from './components';
 import '@fontsource/inter/400.css';
@@ -118,6 +120,7 @@ export default function App() {
   const [saveFilter, setSaveFilter] = useState(false);
   const [filterName, setFilterName] = useState('');
   const [quick, setQuick] = useState('');
+  const [voice, setVoice] = useState<{ projectId: string | null } | null>(null);
   const [tick, setTick] = useState(Date.now());
   const searchRef = useRef<HTMLInputElement>(null);
   const quickRef = useRef<HTMLInputElement>(null);
@@ -797,6 +800,16 @@ export default function App() {
                     onChange={(e) => setQuick(e.target.value)}
                   />
                   <kbd>Enter ↵</kbd>
+                  <button
+                    type="button"
+                    className="icon-button"
+                    aria-label="Criar tarefa por voz"
+                    title="Criar tarefa por voz"
+                    disabled={busy}
+                    onClick={() => setVoice({ projectId: activeProjectId })}
+                  >
+                    <Mic size={19} />
+                  </button>
                   <button disabled={!quick.trim() || busy} className="primary">
                     Capturar
                   </button>
@@ -1033,6 +1046,17 @@ export default function App() {
             <X size={15} />
           </button>
         </div>
+      )}
+      {voice && (
+        <VoiceCapture
+          projectName={w.projects.find((p) => p.id === voice.projectId)?.name}
+          onClose={() => setVoice(null)}
+          onSave={async (title) => {
+            const task = newTask(title);
+            task.projectId = voice.projectId;
+            return mutate((s) => ({ ...s, tasks: [task, ...s.tasks] }), 'Tarefa criada por voz.');
+          }}
+        />
       )}
       {editor && (
         <TaskEditor

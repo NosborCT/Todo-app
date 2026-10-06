@@ -1,5 +1,6 @@
 mod database;
 mod model;
+mod voice;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use std::{path::PathBuf, sync::Mutex};
 use tauri::{Manager, State};
@@ -121,6 +122,16 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
+        .on_window_event(|window, event| {
+            if matches!(
+                event,
+                tauri::WindowEvent::CloseRequested { .. } | tauri::WindowEvent::Destroyed
+            ) {
+                if let Some(state) = window.try_state::<voice::VoiceState>() {
+                    state.cancel();
+                }
+            }
+        })
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             // Isolate manual desktop QA without touching a user's real database.
@@ -133,6 +144,7 @@ pub fn run() {
                 path: dir.join("todo.db"),
                 lock: Mutex::new(()),
             });
+            app.manage(voice::VoiceState::new(dir));
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -141,7 +153,11 @@ pub fn run() {
             undo_workspace,
             export_workspace,
             backup_workspace,
-            open_attachment
+            open_attachment,
+            voice::voice_status,
+            voice::voice_begin,
+            voice::voice_stop,
+            voice::voice_cancel
         ])
         .run(tauri::generate_context!())
         .expect("Não foi possível iniciar o Chrono");

@@ -15,10 +15,10 @@ O comando instala as dependências fixadas em `package-lock.json` na primeira ex
 Pré-requisitos:
 
 - Node.js 22.12+ (ou uma versão LTS mais recente compatível), npm e Rust stable com Cargo no PATH.
-- Windows: Visual Studio com **Desenvolvimento para desktop com C++**, Windows SDK e WebView2 Runtime.
+- Windows x64: Visual Studio com **Desenvolvimento para desktop com C++**, **Ferramentas CMake C++ para Windows**, Windows SDK e WebView2 Runtime. O script encontra o CMake do Visual Studio e prepara libclang 18.1.1 em `.tools` (download de 25 MiB verificado por SHA-256), quando LLVM não está instalado. Não altera o PATH global.
 - Outros desktops: dependências nativas de [Tauri 2](https://v2.tauri.app/start/prerequisites/). A validação deste projeto foi feita no Windows.
 
-Se aparecer `link.exe not found`, instale o componente C++ e reabra o terminal. Não crie `src-tauri/gen/schemas/desktop-schema.json` manualmente: `cargo check --manifest-path src-tauri/Cargo.toml` gera seu conteúdo.
+Se aparecer `link.exe not found`, instale o componente C++ e reabra o terminal. Não crie `src-tauri/gen/schemas/desktop-schema.json` manualmente: `node scripts/native.mjs cargo check` gera seu conteúdo e prepara o ambiente nativo. Em Linux/macOS, a captura exige também as dependências de áudio do CPAL, CMake e libclang instalados; esses sistemas não foram validados.
 
 Outros comandos:
 
@@ -46,6 +46,21 @@ A prévia web informa sua condição na barra lateral e usa localStorage apenas 
 Os dados começam vazios. Tarefas da versão anterior são migradas uma única vez, sem excluir a tabela original. As imagens de demonstração usam fixtures isoladas, não os dados reais.
 
 Atalhos (fora de campos de texto): `N` nova tarefa, `Q` captura, `/` busca, `Ctrl/Cmd+K` comandos, `Ctrl/Cmd+Z` desfazer, `Ctrl/Cmd+\` navegação em janela pequena. `Esc` fecha diálogos. `Tab` fica dentro do diálogo aberto.
+
+## Criar tarefas por voz — primeira etapa
+
+1. Clique no microfone ao lado da captura rápida.
+2. Na primeira utilização, clique em **Instalar modelo**. O aplicativo baixa o Whisper base multilíngue (147.951.465 bytes, aproximadamente 142 MiB), com indicador de progresso e verificação SHA-256. Só o modelo é baixado; nenhum áudio é enviado.
+3. Clique em **Gravar**, fale em português e clique em **Parar e transcrever**. A gravação usa o microfone padrão do sistema e termina automaticamente após 60 segundos.
+4. Revise ou edite o título e clique em **Criar tarefa**. A tarefa entra na Inbox com o projeto selecionado ao abrir a captura. Nenhuma tarefa é criada antes dessa confirmação.
+
+**Cancelar**, Escape e fechar a janela interrompem a operação. A gravação não é salva em arquivo nem incluída em exportações ou backups; o texto revisado é salvo como uma tarefa normal. A transcrição ocorre na CPU com `whisper-rs`; não exige GPU, conta, chave ou internet após instalar o modelo. O áudio é liberado após a transcrição ou o encerramento da operação cancelada. Um download cancelado pode demorar a encerrar se estiver aguardando uma resposta de rede; aguarde antes de iniciar outro.
+
+O modelo fica em `voice/ggml-base.bin`, dentro da pasta de dados do aplicativo. Se ele estiver danificado, use **Reinstalar modelo** na mensagem de erro. Excluir essa pasta remove apenas o modelo; o aplicativo poderá baixá-lo novamente. `.tools` contém somente ferramentas de compilação e não deve ser distribuída com o aplicativo. O executável empacota o mecanismo de transcrição; o modelo é instalado separadamente pelo usuário.
+
+Se o microfone não abrir no Windows, confira **Configurações → Privacidade e segurança → Microfone → Permitir que aplicativos da área de trabalho acessem o microfone**, além do dispositivo de entrada padrão. A prévia no navegador mostra uma explicação e não tenta capturar áudio. Silêncio e gravações muito curtas geram erro recuperável. O reconhecimento pode errar: a revisão é obrigatória, e títulos acima de 240 caracteres precisam ser resumidos. Frases como “amanhã às oito” permanecem no título; interpretação automática de datas fica para outra etapa.
+
+Fontes técnicas: [Whisper.cpp](https://github.com/ggml-org/whisper.cpp), [whisper-rs](https://docs.rs/whisper-rs/0.16.0/whisper_rs/), [CPAL](https://docs.rs/cpal/0.15.3/cpal/).
 
 ## Regras de datas e recorrência
 
