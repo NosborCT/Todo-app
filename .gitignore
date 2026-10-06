@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 .env
+.env.*
+!.env.example
+test-results/
+playwright-report/
+*.db
+*.db-shm
+*.db-wal
 
 # Editor directories and files
 .vscode/*

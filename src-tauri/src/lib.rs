@@ -1,135 +1,148 @@
 mod database;
 mod model;
-use model::{CreateTaskInput, Task, UpdateTaskInput};
-
-use rusqlite::{params, Connection};
+use base64::{engine::general_purpose::STANDARD, Engine};
+use std::{path::PathBuf, sync::Mutex};
 use tauri::{Manager, State};
-
+use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_opener::OpenerExt;
 struct AppState {
-    db_path: String,
-}
-
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
-
-#[tauri::command]
-
-fn update_task(input: UpdateTaskInput, state: State<AppState>) -> Result<(), String> {
-    let connection = Connection::open(&state.db_path).map_err(|error| error.to_string())?;
-
-    connection
-        .execute(
-            "
-            UPDATE tasks
-            SET title = ?1,
-                description = ?2,
-                completed = ?3,
-                updated_at = CURRENT_TIMESTAMP,
-                completed_at = CASE WHEN ?3 THEN CURRENT_TIMESTAMP ELSE NULL END
-            WHERE task_id = ?4
-            ",
-            params![input.title, input.description, input.completed, input.task_id],
-        )
-        .map_err(|error| error.to_string())?;
-
-    Ok(())
+    path: PathBuf,
+    lock: Mutex<()>,
 }
 #[tauri::command]
-fn list_tasks(state: State<AppState>) -> Result<Vec<Task>, String> {
-    let connection = Connection::open(&state.db_path)
-        .map_err(|error| error.to_string())?;
-
-    let mut statement = connection
-        .prepare(
-            "
-            SELECT
-                task_id,
-                title,
-                description,
-                completed,
-                created_at,
-                updated_at,
-                completed_at
-            FROM tasks
-            ORDER BY task_id DESC
-            ",
-        )
-        .map_err(|error| error.to_string())?;
-
-    let task_rows = statement
-        .query_map([], |row| {
-            Ok(Task {
-                task_id: row.get(0)?,
-                title: row.get(1)?,
-                description: row.get(2)?,
-                completed: row.get(3)?,
-                created_at: row.get(4)?,
-                updated_at: row.get(5)?,
-                completed_at: row.get(6)?,
-            })
-        })
-        .map_err(|error| error.to_string())?;
-
-    let mut tasks = Vec::new();
-
-    for task in task_rows {
-        tasks.push(task.map_err(|error| error.to_string())?);
-    }
-
-    Ok(tasks)
-} 
+fn load_workspace(state: State<AppState>) -> Result<database::Loaded, String> {
+    let _guard = state.lock.lock().map_err(|_| "Banco ocupado")?;
+    std::fs::create_dir_all(state.path.parent().ok_or("Diretório inválido")?)
+        .map_err(|e| e.to_string())?;
+    database::init(&state.path)?;
+    let mut result = database::load(&state.path)?;
+    result.warning = database::backup(&state.path, "daily")
+        .err()
+        .map(|e| format!("Backup automático falhou: {e}"));
+    Ok(result)
+}
 #[tauri::command]
-fn create_task(input: CreateTaskInput, state: State<AppState>) -> Result<(), String> {
-    let connection = Connection::open(&state.db_path).map_err(|error| error.to_string())?;
-
-    connection
-        .execute(
-            "
-            INSERT INTO tasks (
-                title,
-                description
+fn save_workspace(
+    data: model::Workspace,
+    revision: i64,
+    importing: bool,
+    state: State<AppState>,
+) -> Result<database::Loaded, String> {
+    let _guard = state.lock.lock().map_err(|_| "Banco ocupado")?;
+    database::save(&state.path, data, revision, importing)
+}
+#[tauri::command]
+fn undo_workspace(state: State<AppState>) -> Result<database::Loaded, String> {
+    let _guard = state.lock.lock().map_err(|_| "Banco ocupado")?;
+    database::undo(&state.path)
+}
+#[tauri::command]
+fn backup_workspace(state: State<AppState>) -> Result<String, String> {
+    let _guard = state.lock.lock().map_err(|_| "Banco ocupado")?;
+    database::backup(&state.path, "manual").map(|p| p.display().to_string())
+}
+#[tauri::command]
+async fn export_workspace(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let data = {
+            let state = app.state::<AppState>();
+            let _g = state.lock.lock().map_err(|_| "Banco ocupado")?;
+            database::load(&state.path)?.data
+        };
+        let file = app
+            .dialog()
+            .file()
+            .set_file_name("chrono-export.json")
+            .add_filter("Chrono JSON", &["json"])
+            .blocking_save_file();
+        if let Some(file) = file {
+            let path = file.into_path().map_err(|e| e.to_string())?;
+            std::fs::write(
+                &path,
+                serde_json::to_vec_pretty(&data).map_err(|e| e.to_string())?,
             )
-            VALUES (?1, ?2)
-            ",
-            params![input.title, input.description],
-        )
-        .map_err(|error| error.to_string())?;
-
-    Ok(())
+            .map_err(|e| e.to_string())?;
+            Ok(Some(path.display().to_string()))
+        } else {
+            Ok(None)
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
-
+#[tauri::command]
+fn open_attachment(
+    task_id: String,
+    attachment_id: String,
+    app: tauri::AppHandle,
+    state: State<AppState>,
+) -> Result<(), String> {
+    let _guard = state.lock.lock().map_err(|_| "Banco ocupado")?;
+    let w = database::load(&state.path)?.data;
+    let a = w
+        .tasks
+        .iter()
+        .find(|t| t.id == task_id)
+        .and_then(|t| t.attachments.iter().find(|a| a.id == attachment_id))
+        .ok_or("Anexo não encontrado")?;
+    // Save to an app-owned directory with a random prefix, never accept a frontend path.
+    let folder = state
+        .path
+        .parent()
+        .ok_or("Diretório inválido")?
+        .join("opened-attachments");
+    std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+    let path = folder.join(format!(
+        "{}-{}",
+        uuid::Uuid::new_v4(),
+        model::safe_name(&a.name)
+    ));
+    let extension = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    if ![
+        "pdf", "png", "jpg", "jpeg", "gif", "webp", "txt", "md", "csv", "docx", "xlsx", "pptx",
+    ]
+    .contains(&extension.as_str())
+    {
+        return Err("Abertura não permitida para este tipo de arquivo. Use a exportação JSON para preservar o anexo.".into());
+    }
+    std::fs::write(&path, STANDARD.decode(&a.data).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())?;
+    app.opener()
+        .open_path(path.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|e| e.to_string())
+}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
-            let app_data_dir = app
-                .path()
-                .app_data_dir()
-                .expect("Não foi possível localizar o diretório de dados da aplicação");
-
-            std::fs::create_dir_all(&app_data_dir)
-                .expect("Não foi possível criar o diretório de dados da aplicação");
-
-            let db_path = app_data_dir.join("todo.db");
-
-            let db_path_str = db_path
-                .to_str()
-                .expect("O caminho do banco de dados não é válido")
-                .to_string();
-
-            database::init_database(&db_path_str)
-                .expect("Não foi possível inicializar o banco de dados");
-
+            let dir = app.path().app_data_dir()?;
+            // Isolate manual desktop QA without touching a user's real database.
+            #[cfg(debug_assertions)]
+            let dir = std::env::var_os("CHRONO_TEST_DATA_DIR")
+                .map(PathBuf::from)
+                .filter(|p| p.is_absolute())
+                .unwrap_or(dir);
             app.manage(AppState {
-                db_path: db_path_str,
+                path: dir.join("todo.db"),
+                lock: Mutex::new(()),
             });
-
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, create_task, list_tasks, update_task])
+        .invoke_handler(tauri::generate_handler![
+            load_workspace,
+            save_workspace,
+            undo_workspace,
+            export_workspace,
+            backup_workspace,
+            open_attachment
+        ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .expect("Não foi possível iniciar o Chrono");
 }
