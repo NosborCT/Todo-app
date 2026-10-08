@@ -50,7 +50,7 @@ Cada tarefa contém estes campos (campos opcionais usam `null`, não são omitid
 - Projeto: `{ "id": "p1", "name": "Trabalho", "color": "#7c3aed" }`.
 - Tag: `{ "id": "tag1", "name": "estudo" }`.
 - Hábito: `{ "id": "h1", "title": "Ler", "weekdays": [1,2,3,4,5], "logs": ["2026-10-06"], "createdAt": "2026-10-06T12:00:00Z" }`. Uma marcação por data.
-- Filtro: `{ "id": "f1", "name": "Importantes", "criteria": { "query": "", "status": "", "projectId": "", "tagId": "", "priority": "3" } }`. String vazia significa qualquer valor.
+- Filtro: `{ "id": "f1", "name": "Importantes", "criteria": { "query": "", "status": "", "projectId": "", "tagId": "", "priority": "3", "dateField": "dueDate", "dateFrom": "2026-10-06", "dateTo": "2026-10-10" } }`. String vazia significa qualquer valor. `dateField` aceita `dueDate` (prazo) ou `startDate` (início); `dateFrom` e `dateTo` aceitam datas locais inclusivas ou string vazia para limite aberto. O início não pode ser posterior ao fim. Arquivos antigos sem esses três campos continuam válidos e recebem `dueDate`, `""` e `""`, respectivamente. Exportações novas incluem os campos; versões antigas do aplicativo podem não aceitar esses arquivos.
 - Sessão: `{ "id": "s1", "taskId": null, "title": "Sessão livre", "seconds": 1500, "endedAt": "2026-10-06T12:25:00Z" }`. Título preservado mesmo se a tarefa for removida.
 - Timer: `null` ou `{ "taskId": null, "endAt": null, "remaining": 1500, "duration": 1500 }`. Segundos inteiros; duração entre 60 e 10800. Importação pausa o timer.
 

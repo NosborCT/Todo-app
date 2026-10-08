@@ -70,13 +70,21 @@ export const taskSchema = z
     (t) => (t.status === 'completed') === (t.completedAt !== null),
     'Conclusão inconsistente.',
   );
-export const filterSchema = z.object({
-  query: z.string().max(500),
-  status: z.string().max(30),
-  projectId: z.string().max(100),
-  tagId: z.string().max(100),
-  priority: z.string().max(1),
-});
+export const filterSchema = z
+  .object({
+    query: z.string().max(500),
+    status: z.string().max(30),
+    projectId: z.string().max(100),
+    tagId: z.string().max(100),
+    priority: z.string().max(1),
+    dateField: z.enum(['dueDate', 'startDate']).default('dueDate'),
+    dateFrom: z.union([date, z.literal('')]).default(''),
+    dateTo: z.union([date, z.literal('')]).default(''),
+  })
+  .refine(
+    (f) => !f.dateFrom || !f.dateTo || f.dateFrom <= f.dateTo,
+    'A data inicial do filtro deve preceder a final.',
+  );
 export const workspaceSchema = z
   .object({
     version: z.literal(1),
@@ -145,6 +153,9 @@ export const emptyFilters: Filters = {
   projectId: '',
   tagId: '',
   priority: '',
+  dateField: 'dueDate',
+  dateFrom: '',
+  dateTo: '',
 };
 export const uid = () => crypto.randomUUID();
 export const now = () => new Date().toISOString();
@@ -311,6 +322,15 @@ export function selectTasks(
       if (filters.priority && String(t.priority) !== filters.priority) return false;
       if (filters.projectId && t.projectId !== filters.projectId) return false;
       if (filters.tagId && !t.tags.includes(filters.tagId)) return false;
+      if (filters.dateFrom || filters.dateTo) {
+        const value = t[filters.dateField];
+        if (
+          !value ||
+          (filters.dateFrom && value < filters.dateFrom) ||
+          (filters.dateTo && value > filters.dateTo)
+        )
+          return false;
+      }
       return `${t.title} ${t.notes} ${t.subtasks.map((s) => s.title).join(' ')} ${w.tags
         .filter((tag) => t.tags.includes(tag.id))
         .map((tag) => tag.name)

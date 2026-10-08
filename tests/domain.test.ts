@@ -3,6 +3,7 @@ import {
   addDays,
   completeTask,
   emptyFilters,
+  filterSchema,
   emptyWorkspace,
   newTask,
   nextOccurrence,
@@ -145,6 +146,55 @@ describe('timer persistido', () => {
         ...emptyWorkspace(),
         timer: { taskId: null, endAt: null, remaining: 1501, duration: 1500 },
       }).success,
+    ).toBe(false);
+  });
+});
+
+describe('filtros de datas locais', () => {
+  const w = emptyWorkspace();
+  w.tasks = [
+    { ...newTask('Antes'), dueDate: '2026-10-05', startDate: '2026-10-01' },
+    { ...newTask('Primeiro dia'), dueDate: '2026-10-06', startDate: '2026-10-02' },
+    { ...newTask('Último dia'), dueDate: '2026-10-10', startDate: '2026-10-06' },
+    { ...newTask('Depois'), dueDate: '2026-10-11', startDate: null },
+    newTask('Sem data'),
+  ];
+  it('inclui as duas bordas e exclui tarefas sem prazo', () => {
+    expect(
+      selectTasks(w, 'all', { ...emptyFilters, dateFrom: '2026-10-06', dateTo: '2026-10-10' }).map(
+        (t) => t.title,
+      ),
+    ).toEqual(['Primeiro dia', 'Último dia']);
+  });
+  it('aceita limites abertos e o mesmo dia nas duas bordas', () => {
+    expect(selectTasks(w, 'all', { ...emptyFilters, dateTo: '2026-10-06' })).toHaveLength(2);
+    expect(selectTasks(w, 'all', { ...emptyFilters, dateFrom: '2026-10-10' })).toHaveLength(2);
+    expect(
+      selectTasks(w, 'all', { ...emptyFilters, dateFrom: '2026-10-06', dateTo: '2026-10-06' }),
+    ).toHaveLength(1);
+    expect(selectTasks(w, 'all', emptyFilters)).toHaveLength(5);
+  });
+  it('filtra início independentemente do prazo e combina com busca', () => {
+    expect(
+      selectTasks(w, 'all', {
+        ...emptyFilters,
+        dateField: 'startDate',
+        dateFrom: '2026-10-06',
+        dateTo: '2026-10-06',
+        query: 'último',
+      }).map((t) => t.title),
+    ).toEqual(['Último dia']);
+  });
+  it('normaliza filtros antigos sem restringir datas', () => {
+    expect(
+      filterSchema.parse({ query: '', status: '', projectId: '', tagId: '', priority: '' }),
+    ).toEqual(emptyFilters);
+  });
+  it('rejeita datas inexistentes e intervalos invertidos', () => {
+    expect(filterSchema.safeParse({ ...emptyFilters, dateFrom: '2026-02-30' }).success).toBe(false);
+    expect(
+      filterSchema.safeParse({ ...emptyFilters, dateFrom: '2026-10-10', dateTo: '2026-10-06' })
+        .success,
     ).toBe(false);
   });
 });

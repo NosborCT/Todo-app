@@ -38,7 +38,7 @@ A prévia web informa sua condição na barra lateral e usa localStorage apenas 
 - Projetos, tags, início, prazo, prioridades, notas em texto, subtarefas e anexos locais.
 - Repetições diárias, semanais, mensais e personalizadas por intervalo, dias da semana e data final.
 - Calendário mensal; hábitos com dias programados e marcações históricas; foco com uma tarefa ativa, pausa e histórico de sessões completas.
-- Busca em títulos, notas, subtarefas e tags; filtros combinados e filtros salvos.
+- Busca em títulos, notas, subtarefas e tags; filtros combinados e filtros salvos. Em **Filtros**, escolha **Prazo** ou **Início** e preencha **De** e/ou **Até** para limitar por data. As duas bordas são inclusivas; tarefas sem a data selecionada ficam fora do intervalo. **Limpar datas** preserva os outros critérios. O intervalo também funciona no Kanban e nos filtros salvos.
 - Desfazer as últimas 30 gravações no desktop, inclusive exclusão, importação e alterações de preferências. A prévia web mantém somente a última alteração.
 - Exportação/importação JSON versionada, incluindo anexos; backups automáticos e manuais.
 - Tema claro/escuro, estados vazios, feedback de gravação, erros recuperáveis e navegação adaptável.

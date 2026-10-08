@@ -625,6 +625,24 @@ kbd {
   font-size: 11px;
   min-width: 120px;
 }
+.date-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  flex-basis: 100%;
+}
+.date-filter-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--secondary);
+}
+.date-filter-row .hint,
+.date-filter-row .field-error {
+  flex-basis: 100%;
+}
 .list-caption {
   display: flex;
   align-items: center;

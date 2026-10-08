@@ -358,7 +358,19 @@ export default function App() {
       { id: 'archive', label: 'Arquivo' },
     ].find((n) => n.id === view)?.label ||
     'Todas as tarefas';
-  const activeFilters = Object.values(filters).filter(Boolean).length;
+  const activeFilters = [
+    filters.query,
+    filters.status,
+    filters.projectId,
+    filters.tagId,
+    filters.priority,
+    filters.dateFrom || filters.dateTo,
+  ].filter(Boolean).length;
+  const invalidDateRange = !!(
+    filters.dateFrom &&
+    filters.dateTo &&
+    filters.dateFrom > filters.dateTo
+  );
   function taskCard(task: Task, board = false) {
     const project = w.projects.find((p) => p.id === task.projectId);
     return (
@@ -900,8 +912,64 @@ export default function App() {
                     <option value="1">Baixa</option>
                     <option value="0">Sem prioridade</option>
                   </select>
+                  <div className="date-filter-row">
+                    <label>
+                      Filtrar por data de
+                      <select
+                        aria-label="Tipo de data"
+                        value={filters.dateField}
+                        onChange={(e) =>
+                          setFilters({
+                            ...filters,
+                            dateField: e.target.value as Filters['dateField'],
+                          })
+                        }
+                      >
+                        <option value="dueDate">Prazo</option>
+                        <option value="startDate">Início</option>
+                      </select>
+                    </label>
+                    <label>
+                      De
+                      <input
+                        aria-label="Data de"
+                        type="date"
+                        value={filters.dateFrom}
+                        max={filters.dateTo || '9999-12-31'}
+                        onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+                      />
+                    </label>
+                    <label>
+                      Até
+                      <input
+                        aria-label="Data até"
+                        type="date"
+                        value={filters.dateTo}
+                        min={filters.dateFrom || undefined}
+                        max="9999-12-31"
+                        onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                      />
+                    </label>
+                    {(filters.dateFrom || filters.dateTo) && (
+                      <button
+                        className="text-button"
+                        onClick={() => setFilters({ ...filters, dateFrom: '', dateTo: '' })}
+                      >
+                        Limpar datas
+                      </button>
+                    )}
+                    <span className="hint">
+                      Limites inclusivos; tarefas sem a data escolhida ficam fora do intervalo.
+                    </span>
+                    {invalidDateRange && (
+                      <span className="field-error" role="alert">
+                        A data “De” deve ser anterior ou igual à data “Até”.
+                      </span>
+                    )}
+                  </div>
                   <button
                     className="secondary"
+                    disabled={invalidDateRange}
                     onClick={() => {
                       setSaveFilter(true);
                       setFilterName('');

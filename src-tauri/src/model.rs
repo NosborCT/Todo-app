@@ -80,6 +80,15 @@ pub struct Criteria {
     pub project_id: String,
     pub tag_id: String,
     pub priority: String,
+    #[serde(default = "default_date_field")]
+    pub date_field: String,
+    #[serde(default)]
+    pub date_from: String,
+    #[serde(default)]
+    pub date_to: String,
+}
+fn default_date_field() -> String {
+    "dueDate".into()
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -339,6 +348,19 @@ pub fn validate(w: &Workspace) -> Result<(), String> {
     }
     for f in &w.filters {
         title(&f.name)?;
+        if !f.criteria.date_from.is_empty() {
+            date(&f.criteria.date_from)?;
+        }
+        if !f.criteria.date_to.is_empty() {
+            date(&f.criteria.date_to)?;
+        }
+        ensure(
+            ["dueDate", "startDate"].contains(&f.criteria.date_field.as_str())
+                && (f.criteria.date_from.is_empty()
+                    || f.criteria.date_to.is_empty()
+                    || f.criteria.date_from <= f.criteria.date_to),
+            "Intervalo de datas do filtro inválido.",
+        )?;
         ensure(
             f.criteria.query.len() <= 2000
                 && (f.criteria.status.is_empty() || statuses.contains(&f.criteria.status.as_str()))

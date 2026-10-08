@@ -271,4 +271,28 @@ mod tests {
         assert!(validate(&w).is_err());
         assert_eq!(crate::model::safe_name("../../bad.exe"), ".._.._bad.exe");
     }
+    #[test]
+    fn date_filters_preserve_legacy_defaults_and_validate_saved_ranges() {
+        let p = db();
+        init(&p).unwrap();
+        let mut w = Workspace::default();
+        w.filters.push(serde_json::from_value(serde_json::json!({"id":"date-filter", "name":"Período", "criteria":{"query":"","status":"","projectId":"","tagId":"","priority":""}})).unwrap());
+        assert_eq!(w.filters[0].criteria.date_field, "dueDate");
+        assert!(w.filters[0].criteria.date_from.is_empty());
+        save(&p, w.clone(), 0, false).unwrap();
+        w.filters[0].criteria.date_field = "startDate".into();
+        w.filters[0].criteria.date_from = "2026-10-06".into();
+        w.filters[0].criteria.date_to = "2026-10-10".into();
+        save(&p, w.clone(), 1, false).unwrap();
+        assert_eq!(
+            load(&p).unwrap().data.filters[0].criteria.date_from,
+            "2026-10-06"
+        );
+        w.filters[0].criteria.date_to = "2026-10-05".into();
+        assert!(save(&p, w.clone(), 2, false).is_err());
+        w.filters[0].criteria.date_to = "2026-02-30".into();
+        assert!(save(&p, w, 2, false).is_err());
+        assert_eq!(load(&p).unwrap().revision, 2);
+        fs::remove_dir_all(p.parent().unwrap()).unwrap();
+    }
 }

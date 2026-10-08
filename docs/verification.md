@@ -47,3 +47,11 @@ git diff --check
 Resultado: 33 testes distintos aprovados (19 domínio, 6 Rust, 7 E2E e 1 integração real com Whisper). O teste de integração é ignorado na execução comum para evitar download de 142 MiB. Foi executado separadamente, primeiro com download e verificação SHA-256, depois com o mesmo modelo sem rede. A fixture WAV mono/16 kHz/16 bits foi gerada por System.Speech com voz sintética em inglês; o teste reconheceu a palavra esperada. O arquivo fica na pasta isolada de testes e não contém gravação do usuário.
 
 Os E2E de voz simulam somente a fronteira IPC nativa e verificam instalação, revisão, confirmação, projeto, recuperação de falha ao salvar, cancelamento e indisponibilidade no navegador. Rust testa silêncio, gravação curta e reamostragem. A inferência real é verificada separadamente. Não foi acionado o microfone físico, nem validada a qualidade do reconhecimento de português com a voz do usuário. Os dados existentes não foram alterados.
+
+## Filtro de datas — melhoria antes da próxima entrega
+
+Adicionados `dateField`, `dateFrom` e `dateTo`, com limites inclusivos e filtros por prazo ou início. Filtros antigos recebem valores padrão compatíveis. Datas inválidas e intervalos invertidos são rejeitados no frontend e no Rust. O teste de interface cobre lista, Kanban, filtro salvo após recarregar, troca de campo, erro de intervalo e limpeza das datas. Captura inspecionada: `docs/screenshots/filtros-data.png`.
+
+Comandos executados nesta melhoria: `npm run build`, `npm test`, `npm run test:rust -- --offline`, `npm run test:e2e` e `git diff --check`. A geração de produção desta melhoria foi adiada conforme solicitado.
+
+Resultado desta melhoria: 39 testes aprovados (24 domínio, 7 Rust, 8 E2E), build frontend concluído e diff sem erros. O teste opt-in de transcrição real ficou ignorado nesta rodada; ele havia passado na validação da captura por voz.
