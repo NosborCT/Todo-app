@@ -3,6 +3,15 @@ import { invoke } from '@tauri-apps/api/core';
 import { Mic, Square, Download } from 'lucide-react';
 import { Dialog } from './components';
 import { desktop } from './lib/storage';
+import { newTask, taskSchema, type Task } from './domain/task';
+import {
+  emptyVoiceSchedule,
+  interpretVoice,
+  reminderToISO,
+  type VoiceSchedule,
+} from './domain/voiceIntent';
+
+export type VoiceTaskDraft = Pick<Task, 'title' | 'startDate' | 'dueDate' | 'reminderAt'>;
 
 type VoiceStatus = {
   phase: string;
@@ -19,10 +28,20 @@ export function VoiceCapture({
 }: {
   projectName?: string;
   onClose: () => void;
-  onSave: (title: string) => Promise<boolean>;
+  onSave: (draft: VoiceTaskDraft) => Promise<boolean>;
 }) {
   const [status, setStatus] = useState<VoiceStatus | null>(null);
   const [text, setText] = useState('');
+  const [transcript, setTranscript] = useState('');
+  const [schedule, setSchedule] = useState<VoiceSchedule>({ ...emptyVoiceSchedule });
+  const [messages, setMessages] = useState<string[]>([]);
+  const interpretationTime = useRef(new Date());
+  const applyInterpretation = (value: string, reference: Date) => {
+    const { messages, ...fields } = interpretVoice(value, reference);
+    setSchedule(fields);
+    setMessages(messages);
+    setError('');
+  };
   const [error, setError] = useState('');
   const [pending, setPending] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -51,6 +70,9 @@ export function VoiceCapture({
           if (next.phase !== 'review') reviewed.current = false;
           else if (!reviewed.current) {
             setText(next.text);
+            setTranscript(next.text);
+            interpretationTime.current = new Date();
+            applyInterpretation(next.text, interpretationTime.current);
             reviewed.current = true;
           }
         }
@@ -152,7 +174,18 @@ export function VoiceCapture({
                       setSaving(true);
                       setError('');
                       try {
-                        if (await onSave(text.trim())) onClose();
+                        const reminderAt = reminderToISO(schedule.reminder);
+                        if (reminderAt && new Date(reminderAt).getTime() <= Date.now())
+                          throw new Error('Escolha um lembrete futuro ou limpe o campo Lembrete.');
+                        const draft = {
+                          title: text.trim(),
+                          startDate: schedule.startDate || null,
+                          dueDate: schedule.dueDate || null,
+                          reminderAt,
+                        };
+                        const validated = taskSchema.safeParse({ ...newTask(), ...draft });
+                        if (!validated.success) throw new Error(validated.error.issues[0].message);
+                        if (await onSave(draft)) onClose();
                         else
                           setError(
                             'Não foi possível salvar. Seu texto foi mantido; tente novamente.',
@@ -170,13 +203,88 @@ export function VoiceCapture({
                       id="voice-text"
                       value={text}
                       onChange={(e) => setText(e.target.value)}
-                      rows={4}
+                      rows={2}
                       disabled={saving}
                     />
                     <p className="hint">
-                      {text.trim().length}/240 caracteres. Datas mencionadas permanecem no texto
-                      nesta etapa.
+                      {text.trim().length}/240 caracteres. Editar o título preserva as datas abaixo.
                     </p>
+                    <details>
+                      <summary>Transcrição original</summary>
+                      <p>{transcript}</p>
+                    </details>
+                    <fieldset className="voice-schedule" disabled={saving}>
+                      <legend>Agendamento sugerido — revise antes de criar</legend>
+                      <label>
+                        Início
+                        <input
+                          aria-label="Início sugerido"
+                          type="date"
+                          max="9999-12-31"
+                          value={schedule.startDate}
+                          onChange={(e) =>
+                            setSchedule((s) => ({ ...s, startDate: e.target.value }))
+                          }
+                        />
+                      </label>
+                      <label>
+                        Prazo
+                        <input
+                          aria-label="Prazo sugerido"
+                          type="date"
+                          max="9999-12-31"
+                          value={schedule.dueDate}
+                          onChange={(e) => setSchedule((s) => ({ ...s, dueDate: e.target.value }))}
+                        />
+                      </label>
+                      <label>
+                        Lembrete
+                        <input
+                          aria-label="Lembrete sugerido"
+                          type="datetime-local"
+                          max="9999-12-31T23:59"
+                          value={schedule.reminder}
+                          onChange={(e) => setSchedule((s) => ({ ...s, reminder: e.target.value }))}
+                        />
+                      </label>
+                      <p className="hint">Horários locais. Sem horário, não é sugerido lembrete.</p>
+                      {schedule.reminder && (
+                        <p className="hint">
+                          O alerta aparece com o Chrono aberto. Para receber também a notificação
+                          desktop, ative Notificações nas Configurações.
+                        </p>
+                      )}
+                      {messages.length > 0 && (
+                        <ul
+                          className="voice-interpretation"
+                          aria-label="Observações da interpretação"
+                        >
+                          {messages.map((m, i) => (
+                            <li key={i}>{m}</li>
+                          ))}
+                        </ul>
+                      )}
+                      <div className="voice-actions">
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => applyInterpretation(text, interpretationTime.current)}
+                        >
+                          Interpretar título novamente
+                        </button>
+                        <button
+                          type="button"
+                          className="text-button"
+                          onClick={() => {
+                            setSchedule({ ...emptyVoiceSchedule });
+                            setMessages([]);
+                            setError('');
+                          }}
+                        >
+                          Limpar agendamento
+                        </button>
+                      </div>
+                    </fieldset>
                     {text.trim().length > 240 && (
                       <p className="field-error">Resuma o título para até 240 caracteres.</p>
                     )}

@@ -1119,8 +1119,8 @@ export default function App() {
         <VoiceCapture
           projectName={w.projects.find((p) => p.id === voice.projectId)?.name}
           onClose={() => setVoice(null)}
-          onSave={async (title) => {
-            const task = newTask(title);
+          onSave={async (draft) => {
+            const task = { ...newTask(draft.title), ...draft };
             task.projectId = voice.projectId;
             return mutate((s) => ({ ...s, tasks: [task, ...s.tasks] }), 'Tarefa criada por voz.');
           }}

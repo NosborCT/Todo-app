@@ -47,18 +47,39 @@ Os dados começam vazios. Tarefas da versão anterior são migradas uma única v
 
 Atalhos (fora de campos de texto): `N` nova tarefa, `Q` captura, `/` busca, `Ctrl/Cmd+K` comandos, `Ctrl/Cmd+Z` desfazer, `Ctrl/Cmd+\` navegação em janela pequena. `Esc` fecha diálogos. `Tab` fica dentro do diálogo aberto.
 
-## Criar tarefas por voz — primeira etapa
+## Criar tarefas por voz
 
 1. Clique no microfone ao lado da captura rápida.
 2. Na primeira utilização, clique em **Instalar modelo**. O aplicativo baixa o Whisper base multilíngue (147.951.465 bytes, aproximadamente 142 MiB), com indicador de progresso e verificação SHA-256. Só o modelo é baixado; nenhum áudio é enviado.
 3. Clique em **Gravar**, fale em português e clique em **Parar e transcrever**. A gravação usa o microfone padrão do sistema e termina automaticamente após 60 segundos.
-4. Revise ou edite o título e clique em **Criar tarefa**. A tarefa entra na Inbox com o projeto selecionado ao abrir a captura. Nenhuma tarefa é criada antes dessa confirmação.
+4. Revise o título e os campos **Início**, **Prazo** e **Lembrete** sugeridos automaticamente. Clique em **Criar tarefa**. A tarefa entra na Inbox com o projeto selecionado ao abrir a captura. Nenhuma tarefa é criada antes dessa confirmação.
 
 **Cancelar**, Escape e fechar a janela interrompem a operação. A gravação não é salva em arquivo nem incluída em exportações ou backups; o texto revisado é salvo como uma tarefa normal. A transcrição ocorre na CPU com `whisper-rs`; não exige GPU, conta, chave ou internet após instalar o modelo. O áudio é liberado após a transcrição ou o encerramento da operação cancelada. Um download cancelado pode demorar a encerrar se estiver aguardando uma resposta de rede; aguarde antes de iniciar outro.
 
 O modelo fica em `voice/ggml-base.bin`, dentro da pasta de dados do aplicativo. Se ele estiver danificado, use **Reinstalar modelo** na mensagem de erro. Excluir essa pasta remove apenas o modelo; o aplicativo poderá baixá-lo novamente. `.tools` contém somente ferramentas de compilação e não deve ser distribuída com o aplicativo. O executável empacota o mecanismo de transcrição; o modelo é instalado separadamente pelo usuário.
 
-Se o microfone não abrir no Windows, confira **Configurações → Privacidade e segurança → Microfone → Permitir que aplicativos da área de trabalho acessem o microfone**, além do dispositivo de entrada padrão. A prévia no navegador mostra uma explicação e não tenta capturar áudio. Silêncio e gravações muito curtas geram erro recuperável. O reconhecimento pode errar: a revisão é obrigatória, e títulos acima de 240 caracteres precisam ser resumidos. Frases como “amanhã às oito” permanecem no título; interpretação automática de datas fica para outra etapa.
+Se o microfone não abrir no Windows, confira **Configurações → Privacidade e segurança → Microfone → Permitir que aplicativos da área de trabalho acessem o microfone**, além do dispositivo de entrada padrão. A prévia no navegador mostra uma explicação e não tenta capturar áudio. Silêncio e gravações muito curtas geram erro recuperável. O reconhecimento pode errar: a revisão é obrigatória, e títulos acima de 240 caracteres precisam ser resumidos.
+
+### Datas e lembretes falados
+
+A interpretação usa regras locais em português, sem modelo adicional, conta ou envio de texto. Exemplos:
+
+| Frase                                                         | Campos sugeridos                                  |
+| ------------------------------------------------------------- | ------------------------------------------------- |
+| Comprar pão amanhã                                            | Prazo amanhã, sem lembrete                        |
+| Consulta sexta-feira às duas da tarde                         | Prazo na próxima sexta e lembrete às 14h          |
+| Revisar depois de amanhã às oito e meia                       | Prazo e lembrete às 08h30                         |
+| Entregar dia 12 de outubro às 14h, me lembre 30 minutos antes | Prazo dia 12 e lembrete às 13h30                  |
+| Começar relatório amanhã e entregar sexta às 14h              | Início amanhã, prazo sexta, lembrete sexta às 14h |
+| Me lembre daqui a duas horas                                  | Lembrete relativo, sem alterar o prazo            |
+
+Também aceita `hoje`, `DD/MM`, `DD/MM/AAAA`, `meio-dia`, `meia-noite`, horários como `18:05`/`14h30` e intervalos de 1 a 365 minutos, horas, dias ou semanas. Intervalos relativos em minutos/horas são arredondados para o próximo minuto, com aviso, para não antecipar o alerta. Dias da semana significam a próxima ocorrência (se for hoje, a semana seguinte). Data sem ano usa o ano atual ou o seguinte se já passou; informe quatro dígitos para fixar o ano. Dia sem mês, múltiplas datas conflitantes e expressões recorrentes exigem ajuste manual. Repetição continua configurável nos detalhes.
+
+Data com horário sugere um lembrete; só data não inventa hora. `Começar`/`iniciar` preenche início; `entregar`/`concluir`/`prazo` preenche prazo. Início armazena apenas uma data. Um pedido explícito de lembrete substitui a sugestão do prazo; antecedência exige dia e hora da tarefa. Horário sozinho usa a próxima ocorrência para um prazo, ou o dia da tarefa para um lembrete explícito, sempre com aviso. Lembretes no passado não podem ser confirmados nessa tela: ajuste ou limpe o campo.
+
+As sugestões usam o fuso do computador e o momento em que a transcrição chegou. Datas civis não são convertidas para UTC; o lembrete é convertido para um instante ao salvar. A transcrição original continua visível, e o título não é removido ou reescrito automaticamente. Editar o título preserva ajustes manuais; **Interpretar título novamente** substitui os campos pelas novas sugestões, usando a mesma referência de tempo. **Limpar agendamento** remove todos os campos sugeridos. Expressões fora dessa gramática podem não ser reconhecidas: confira os campos antes de confirmar.
+
+O alerta de lembrete requer o Chrono aberto. Para notificação desktop, habilite **Notificações** nas Configurações e autorize no sistema; a captura por voz não muda essa preferência.
 
 Fontes técnicas: [Whisper.cpp](https://github.com/ggml-org/whisper.cpp), [whisper-rs](https://docs.rs/whisper-rs/0.16.0/whisper_rs/), [CPAL](https://docs.rs/cpal/0.15.3/cpal/).
 

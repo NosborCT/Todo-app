@@ -55,3 +55,13 @@ Adicionados `dateField`, `dateFrom` e `dateTo`, com limites inclusivos e filtros
 Comandos executados nesta melhoria: `npm run build`, `npm test`, `npm run test:rust -- --offline`, `npm run test:e2e` e `git diff --check`. A geração de produção desta melhoria foi adiada conforme solicitado.
 
 Resultado desta melhoria: 39 testes aprovados (24 domínio, 7 Rust, 8 E2E), build frontend concluído e diff sem erros. O teste opt-in de transcrição real ficou ignorado nesta rodada; ele havia passado na validação da captura por voz.
+
+## Interpretação de expressões na captura por voz — 08/10/2026
+
+Adicionada interpretação local em português para início, prazo e lembrete, com revisão editável, transcrição original, reinterpretação explícita e limpeza do agendamento. O projeto de origem é preservado. Data com hora sugere lembrete; data sem hora não inventa horário. A implementação é uma gramática documentada, não um interpretador geral de linguagem natural.
+
+Comandos executados: `npm test`, `npm run test:e2e -- e2e/voice.spec.ts`, `npm run test:e2e`, `npm run build`, `git diff --check`.
+
+Resultado: 61 testes de domínio e 10 E2E aprovados; TypeScript/Vite e verificação de whitespace concluídos. Cobertura inclui datas relativas, dias da semana, números por extenso, antecedência, ambiguidade, datas impossíveis, virada de ano, horário inexistente no fuso America/New_York, prevenção de arredondamento antecipado, revisão manual, falha de gravação e conversão do lembrete de America/Sao_Paulo para UTC. Tela inspecionada em `docs/screenshots/voz-agendamento.png`.
+
+Os E2E simulam somente a transcrição/IPC e exercitam a interpretação real, a interface e a criação da tarefa. Não foi acionado o microfone físico nesta rodada. O mecanismo nativo e o formato de dados não foram alterados; não houve novo build/entrega desktop de produção, conforme solicitado.
