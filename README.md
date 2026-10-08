@@ -56,7 +56,7 @@ Atalhos (fora de campos de texto): `N` nova tarefa, `Q` captura, `/` busca, `Ctr
 
 **Cancelar**, Escape e fechar a janela interrompem a operação. A gravação não é salva em arquivo nem incluída em exportações ou backups; o texto revisado é salvo como uma tarefa normal. A transcrição ocorre na CPU com `whisper-rs`; não exige GPU, conta, chave ou internet após instalar o modelo. O áudio é liberado após a transcrição ou o encerramento da operação cancelada. Um download cancelado pode demorar a encerrar se estiver aguardando uma resposta de rede; aguarde antes de iniciar outro.
 
-O modelo fica em `voice/ggml-base.bin`, dentro da pasta de dados do aplicativo. Se ele estiver danificado, use **Reinstalar modelo** na mensagem de erro. Excluir essa pasta remove apenas o modelo; o aplicativo poderá baixá-lo novamente. `.tools` contém somente ferramentas de compilação e não deve ser distribuída com o aplicativo. O executável empacota o mecanismo de transcrição; o modelo é instalado separadamente pelo usuário.
+O modelo fica em `voice/ggml-base.bin`, dentro da pasta original do aplicativo (`%APPDATA%\com.usuario.todo-app` no Windows), mesmo após mudar a pasta do banco. Se ele estiver danificado, use **Reinstalar modelo** na mensagem de erro. Excluir essa pasta remove apenas o modelo; o aplicativo poderá baixá-lo novamente. `.tools` contém somente ferramentas de compilação e não deve ser distribuída com o aplicativo. O executável empacota o mecanismo de transcrição; o modelo é instalado separadamente pelo usuário.
 
 Se o microfone não abrir no Windows, confira **Configurações → Privacidade e segurança → Microfone → Permitir que aplicativos da área de trabalho acessem o microfone**, além do dispositivo de entrada padrão. A prévia no navegador mostra uma explicação e não tenta capturar áudio. Silêncio e gravações muito curtas geram erro recuperável. O reconhecimento pode errar: a revisão é obrigatória, e títulos acima de 240 caracteres precisam ser resumidos.
 
@@ -104,6 +104,7 @@ Lembretes e término do foco são avaliados a cada segundo **enquanto a aplicaç
 - `src/TaskEditor.tsx`, `src/Views.tsx`, `src/components.tsx`: componentes de edição, calendário, hábitos, foco, configurações e diálogos.
 - `src-tauri/src/model.rs`: contrato Serde e validação defensiva de toda entrada, inclusive arquivos importados.
 - `src-tauri/src/database.rs`: SQLite, migração do cadastro anterior, transações, revisão otimista, desfazer e backups.
+- `src-tauri/src/locations.rs` e `src/StorageLocations.tsx`: escolha de pastas, migração consistente do SQLite e configuração local dos destinos.
 - `src-tauri/src/lib.rs`: comandos estreitos de dados, exportação nativa e abertura de anexos.
 
 O SQLite mantém um documento JSON versionado na tabela `workspace`, com revisão incremental, e snapshots em `undo_history`. Essa escolha mantém alterações com múltiplas entidades, recorrência, importação e desfazer atômicos e facilita exportação integral. A aplicação pessoal tem limite de 20 mil tarefas e documento de 50 MB; para volumes muito maiores, o próximo passo arquitetural é normalizar as entidades e fazer consultas SQL indexadas. Não há servidor nem sincronização.
@@ -120,6 +121,14 @@ O identificador anterior `com.usuario.todo-app` foi preservado para não perder 
 %APPDATA%\com.usuario.todo-app\opened-attachments\
 ```
 
+Em **Configurações → Pastas de armazenamento**, use **Alterar pasta dos dados** ou **Alterar pasta dos backups**, escolha uma pasta existente no diálogo nativo e confirme o destino. As escolhas são independentes e entram em uso imediatamente, inclusive após reabrir o aplicativo.
+
+A mudança dos dados cria uma cópia consistente do SQLite (incluindo tarefas, anexos, hábitos e histórico de desfazer), valida e sincroniza a cópia antes de trocar o caminho ativo. A pasta de destino não pode conter `todo.db`, `todo.db-wal` ou `todo.db-shm`: o aplicativo não sobrescreve nem incorpora um banco existente. A cópia antiga permanece no local original; ela deixa de receber alterações. Feche outras instâncias do Chrono antes da transferência. Novas cópias temporárias de anexos abertos ficam na nova pasta; caches antigos não precisam ser transferidos.
+
+Ao mudar os backups, é criado um JSON `location-change` de verificação no destino. Backups diários, manuais e anteriores à importação passam a usar essa pasta; os arquivos antigos permanecem onde estavam. Os backups `location-change` também são preservados sem expiração automática.
+
+Os caminhos ficam em `storage-locations.json`, na pasta original do aplicativo. Essa configuração pertence ao computador e não é incluída no JSON exportado. O modelo de voz permanece na pasta original. Mantenha a unidade escolhida conectada: se o banco estiver indisponível, o Chrono apresenta erro e permite tentar novamente, sem criar um banco vazio ou voltar silenciosamente à cópia antiga. Uma configuração inválida também exige recuperação desse arquivo. Se apenas o destino dos backups estiver indisponível, as gravações normais mostram aviso; importações são recusadas até que o backup obrigatório possa ser criado.
+
 Anexos são incorporados como base64 no documento SQLite/JSON: exportar inclui o conteúdo dos arquivos. Limites: 10 MB por anexo, 20 anexos por tarefa, 50 MB por workspace. Ao abrir um anexo, o Rust grava uma cópia em `opened-attachments` com prefixo UUID e nome sanitizado; nenhum caminho arbitrário vem da interface. Arquivos executáveis não são abertos. Abertura permitida: PDF, imagens comuns, TXT, Markdown, CSV e DOCX/XLSX/PPTX. Cópias dessa pasta podem ser apagadas com o aplicativo fechado; não são o original persistido.
 
 Permissões declaradas: `core:default` e `notification:default`, somente para a janela `main`. Exportação usa diálogo nativo no Rust; a interface não recebe permissão genérica de escrita no sistema. Abertura de anexos também passa pelo comando Rust restrito. CSP impede conteúdo remoto e execução de objetos. Fontes e ícones são empacotados, sem CDN.
@@ -135,7 +144,7 @@ Não há contas, cobrança, telemetria, analytics, plano de controle hospedado, 
 
 Backups automáticos registram o estado no primeiro acesso de cada dia UTC: ao abrir e antes de salvar. São mantidos os 30 dias mais recentes; alterações posteriores no mesmo dia ficam no SQLite. Use **Criar backup** para um snapshot imediato. Backups manuais e `before-import` não são removidos automaticamente. Copie os JSONs para outro dispositivo para se proteger de falha física do disco; nenhum arquivo é enviado à nuvem.
 
-Se o SQLite estiver corrompido e o aplicativo não conseguir abrir: feche o Chrono, preserve `todo.db`, `todo.db-wal` e `todo.db-shm` renomeando-os ou copiando-os para uma pasta segura. Remova-os do diretório ativo somente após preservar as cópias. Abra o Chrono para criar um banco vazio e importe o JSON de backup escolhido. Nunca copie somente um banco WAL aberto esperando consistência; prefira exportação JSON com o app aberto ou copie todos os arquivos com ele fechado.
+Se a unidade estiver desconectada, reconecte-a e tente novamente. Para recuperar um SQLite corrompido a partir de JSON: feche o Chrono, preserve a pasta de dados ativa inteira (incluindo `todo.db`, `todo.db-wal` e `todo.db-shm`) e copie o JSON escolhido para um local seguro. Renomeie a pasta original `%APPDATA%\com.usuario.todo-app` para um nome de recuperação ainda não utilizado, preservando também `storage-locations.json` e os backups. Abra o Chrono: uma nova pasta padrão e um banco vazio serão criados. Importe o JSON e, depois, escolha novamente os destinos desejados em Configurações (uma pasta sem banco para os dados). Não apague as cópias preservadas antes de conferir a recuperação. Nunca copie somente um banco WAL aberto esperando consistência; prefira exportação JSON com o app aberto ou copie todos os arquivos com ele fechado.
 
 ## Testes
 

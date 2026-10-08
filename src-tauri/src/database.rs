@@ -17,7 +17,14 @@ pub struct Loaded {
     pub data_path: String,
 }
 fn open(path: &Path) -> Result<Connection, String> {
-    let c = Connection::open(path).map_err(|e| e.to_string())?;
+    connect(path, false)
+}
+fn connect(path: &Path, create: bool) -> Result<Connection, String> {
+    let mut flags = rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE;
+    if create {
+        flags |= rusqlite::OpenFlags::SQLITE_OPEN_CREATE;
+    }
+    let c = Connection::open_with_flags(path, flags).map_err(|e| e.to_string())?;
     c.busy_timeout(Duration::from_secs(5))
         .map_err(|e| e.to_string())?;
     c.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;")
@@ -25,7 +32,7 @@ fn open(path: &Path) -> Result<Connection, String> {
     Ok(c)
 }
 pub fn init(path: &Path) -> Result<(), String> {
-    let mut c = open(path)?;
+    let mut c = connect(path, true)?;
     c.execute_batch(include_str!("../migrations/0001_create_tasks.sql"))
         .map_err(|e| e.to_string())?;
     let tx = c.transaction().map_err(|e| e.to_string())?;
@@ -86,9 +93,13 @@ pub fn load(path: &Path) -> Result<Loaded, String> {
         data_path: path.display().to_string(),
     })
 }
+#[cfg(test)]
 pub fn backup(path: &Path, label: &str) -> Result<PathBuf, String> {
-    let data = load(path)?.data;
     let folder = path.parent().ok_or("Diretório inválido")?.join("backups");
+    backup_in(path, &folder, label)
+}
+pub fn backup_in(path: &Path, folder: &Path, label: &str) -> Result<PathBuf, String> {
+    let data = load(path)?.data;
     fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     let name = if label == "daily" {
         format!("chrono-daily-{}.json", Utc::now().format("%Y-%m-%d"))
@@ -123,17 +134,33 @@ pub fn backup(path: &Path, label: &str) -> Result<PathBuf, String> {
     }
     Ok(dest)
 }
+#[cfg(test)]
 pub fn save(
     path: &Path,
     data: Workspace,
     revision: i64,
     importing: bool,
 ) -> Result<Loaded, String> {
+    save_in(
+        path,
+        &path.parent().ok_or("Diretório inválido")?.join("backups"),
+        data,
+        revision,
+        importing,
+    )
+}
+pub fn save_in(
+    path: &Path,
+    backups: &Path,
+    data: Workspace,
+    revision: i64,
+    importing: bool,
+) -> Result<Loaded, String> {
     validate(&data)?;
     if importing {
-        backup(path, "before-import")?;
+        backup_in(path, backups, "before-import")?;
     }
-    let warning = backup(path, "daily")
+    let warning = backup_in(path, backups, "daily")
         .err()
         .map(|e| format!("Backup automático falhou: {e}"));
     let mut c = open(path)?;
@@ -250,7 +277,7 @@ mod tests {
     fn legacy_migration_is_idempotent() {
         let p = db();
         {
-            let c = open(&p).unwrap();
+            let c = connect(&p, true).unwrap();
             c.execute_batch(include_str!("../migrations/0001_create_tasks.sql"))
                 .unwrap();
             c.execute("INSERT INTO tasks(title,completed) VALUES ('Antiga',1)", [])

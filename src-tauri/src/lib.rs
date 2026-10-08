@@ -1,4 +1,5 @@
 mod database;
+mod locations;
 mod model;
 mod voice;
 use base64::{engine::general_purpose::STANDARD, Engine};
@@ -7,17 +8,16 @@ use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 struct AppState {
-    path: PathBuf,
+    root: PathBuf,
     lock: Mutex<()>,
 }
 #[tauri::command]
 fn load_workspace(state: State<AppState>) -> Result<database::Loaded, String> {
     let _guard = state.lock.lock().map_err(|_| "Banco ocupado")?;
-    std::fs::create_dir_all(state.path.parent().ok_or("Diretório inválido")?)
-        .map_err(|e| e.to_string())?;
-    database::init(&state.path)?;
-    let mut result = database::load(&state.path)?;
-    result.warning = database::backup(&state.path, "daily")
+    let locations = locations::initialize(&state.root)?;
+    database::init(&locations.database()?)?;
+    let mut result = database::load(&locations.database()?)?;
+    result.warning = database::backup_in(&locations.database()?, &locations.backup_dir, "daily")
         .err()
         .map(|e| format!("Backup automático falhou: {e}"));
     Ok(result)
@@ -30,17 +30,27 @@ fn save_workspace(
     state: State<AppState>,
 ) -> Result<database::Loaded, String> {
     let _guard = state.lock.lock().map_err(|_| "Banco ocupado")?;
-    database::save(&state.path, data, revision, importing)
+    let locations = locations::initialize(&state.root)?;
+    database::save_in(
+        &locations.database()?,
+        &locations.backup_dir,
+        data,
+        revision,
+        importing,
+    )
 }
 #[tauri::command]
 fn undo_workspace(state: State<AppState>) -> Result<database::Loaded, String> {
     let _guard = state.lock.lock().map_err(|_| "Banco ocupado")?;
-    database::undo(&state.path)
+    let locations = locations::initialize(&state.root)?;
+    database::undo(&locations.database()?)
 }
 #[tauri::command]
 fn backup_workspace(state: State<AppState>) -> Result<String, String> {
     let _guard = state.lock.lock().map_err(|_| "Banco ocupado")?;
-    database::backup(&state.path, "manual").map(|p| p.display().to_string())
+    let locations = locations::initialize(&state.root)?;
+    database::backup_in(&locations.database()?, &locations.backup_dir, "manual")
+        .map(|p| p.display().to_string())
 }
 #[tauri::command]
 async fn export_workspace(app: tauri::AppHandle) -> Result<Option<String>, String> {
@@ -48,7 +58,8 @@ async fn export_workspace(app: tauri::AppHandle) -> Result<Option<String>, Strin
         let data = {
             let state = app.state::<AppState>();
             let _g = state.lock.lock().map_err(|_| "Banco ocupado")?;
-            database::load(&state.path)?.data
+            let locations = locations::initialize(&state.root)?;
+            database::load(&locations.database()?)?.data
         };
         let file = app
             .dialog()
@@ -79,7 +90,8 @@ fn open_attachment(
     state: State<AppState>,
 ) -> Result<(), String> {
     let _guard = state.lock.lock().map_err(|_| "Banco ocupado")?;
-    let w = database::load(&state.path)?.data;
+    let locations = locations::initialize(&state.root)?;
+    let w = database::load(&locations.database()?)?.data;
     let a = w
         .tasks
         .iter()
@@ -87,11 +99,7 @@ fn open_attachment(
         .and_then(|t| t.attachments.iter().find(|a| a.id == attachment_id))
         .ok_or("Anexo não encontrado")?;
     // Save to an app-owned directory with a random prefix, never accept a frontend path.
-    let folder = state
-        .path
-        .parent()
-        .ok_or("Diretório inválido")?
-        .join("opened-attachments");
+    let folder = locations.data_dir.join("opened-attachments");
     std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     let path = folder.join(format!(
         "{}-{}",
@@ -115,6 +123,43 @@ fn open_attachment(
     app.opener()
         .open_path(path.to_string_lossy().to_string(), None::<&str>)
         .map_err(|e| e.to_string())
+}
+#[tauri::command]
+fn storage_locations(state: State<AppState>) -> Result<locations::Locations, String> {
+    let _guard = state.lock.lock().map_err(|_| "Armazenamento ocupado")?;
+    locations::initialize(&state.root)
+}
+#[tauri::command]
+async fn pick_storage_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .set_title("Escolha a pasta de armazenamento do Chrono")
+            .blocking_pick_folder()
+            .map(|file| {
+                file.into_path()
+                    .map(|p| p.display().to_string())
+                    .map_err(|e| e.to_string())
+            })
+            .transpose()
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+#[tauri::command]
+async fn change_storage_location(
+    kind: String,
+    folder: String,
+    app: tauri::AppHandle,
+) -> Result<database::Loaded, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<AppState>();
+        let _guard = state.lock.lock().map_err(|_| "Armazenamento ocupado")?;
+        let locations = locations::change(&state.root, &kind, &PathBuf::from(folder))?;
+        database::load(&locations.database()?)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -141,7 +186,7 @@ pub fn run() {
                 .filter(|p| p.is_absolute())
                 .unwrap_or(dir);
             app.manage(AppState {
-                path: dir.join("todo.db"),
+                root: dir.clone(),
                 lock: Mutex::new(()),
             });
             app.manage(voice::VoiceState::new(dir));
@@ -154,6 +199,9 @@ pub fn run() {
             export_workspace,
             backup_workspace,
             open_attachment,
+            storage_locations,
+            pick_storage_folder,
+            change_storage_location,
             voice::voice_status,
             voice::voice_begin,
             voice::voice_stop,

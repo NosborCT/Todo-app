@@ -30,6 +30,8 @@ import {
   timerRemaining,
 } from './domain/task';
 import { Empty, Dialog } from './components';
+import { StorageLocations } from './StorageLocations';
+import type { StorageKind } from './lib/storage';
 import { backupWorkspace, desktop, exportWorkspace, notify } from './lib/storage';
 export type Mutate = (
   fn: (w: Workspace) => Workspace,
@@ -449,11 +451,13 @@ export function SettingsView({
   mutate,
   path,
   report,
+  onStorageChange,
 }: {
   w: Workspace;
   mutate: Mutate;
   path: string;
   report: (message: string, error?: boolean) => void;
+  onStorageChange: (kind: StorageKind, folder: string) => Promise<void>;
 }) {
   const [project, setProject] = useState('');
   const [tag, setTag] = useState('');
@@ -526,6 +530,7 @@ export function SettingsView({
           diários mais recentes são mantidos. Backups manuais e anteriores à importação são
           preservados.
         </p>
+        <StorageLocations onChange={onStorageChange} />
       </section>
       <section className="panel">
         <h2>

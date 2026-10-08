@@ -28,6 +28,12 @@ function previewLoad(): Loaded {
   };
 }
 export const desktop = isTauri();
+export type StorageLocations = { dataDir: string; backupDir: string };
+export type StorageKind = 'data' | 'backup';
+export const getStorageLocations = () => invoke<StorageLocations>('storage_locations');
+export const pickStorageFolder = () => invoke<string | null>('pick_storage_folder');
+export const changeStorageLocation = (kind: StorageKind, folder: string) =>
+  invoke<Loaded>('change_storage_location', { kind, folder });
 export async function loadWorkspace(): Promise<Loaded> {
   return desktop ? invoke('load_workspace') : previewLoad();
 }

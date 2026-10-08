@@ -59,6 +59,8 @@ import {
   desktop,
   notify,
   type Loaded,
+  changeStorageLocation,
+  type StorageKind,
 } from './lib/storage';
 import { TaskEditor } from './TaskEditor';
 import { VoiceCapture } from './VoiceCapture';
@@ -182,6 +184,17 @@ export default function App() {
     },
     [accept],
   );
+  const relocateStorage = async (kind: StorageKind, folder: string) => {
+    if (lock.current) throw new Error('Aguarde o salvamento atual e tente novamente.');
+    lock.current = true;
+    setBusy(true);
+    try {
+      accept(await changeStorageLocation(kind, folder));
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  };
   const undo = useCallback(async () => {
     if (lock.current || !current.current?.canUndo) return;
     lock.current = true;
@@ -1094,7 +1107,13 @@ export default function App() {
           ) : view === 'focus' ? (
             <FocusView w={w} mutate={mutate} tick={tick} />
           ) : (
-            <SettingsView w={w} mutate={mutate} path={loaded.dataPath} report={report} />
+            <SettingsView
+              w={w}
+              mutate={mutate}
+              path={loaded.dataPath}
+              report={report}
+              onStorageChange={relocateStorage}
+            />
           )}
         </div>
         <footer className="workspace-footer">
